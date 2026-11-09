@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Vagas para Concursos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .dragging {
+            opacity: 0.4;
+            background: #e0e7ff !important;
+        }
+        [draggable="true"] { cursor: grab; }
+        [draggable="true"]:active { cursor: grabbing; }
+
+        .handle-toque {
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        .arrastando-toque {
+            background: #fff;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, .22);
+            border-radius: .5rem;
+        }
+
+        .cor-outra {
+            background: conic-gradient(#ef4444, #facc15, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444);
+        }
+
+        .valores { display: flex; flex-wrap: wrap; gap: .2rem 1.25rem; }
+        .valor { white-space: nowrap; }
+
+        @media (max-width: 767px) {
+            /* evita o zoom automático do iOS ao focar nos campos */
+            input, textarea, select { font-size: 16px !important; }
+        }
+        .hidden { display: none !important; }
+        .situacao-concurso { position: absolute; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+        .situacao-selo { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .situacao-previsto { background: #fde047; color: #713f12; border: 1px solid #eab308; }
+        .situacao-encerrado { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+        .situacao-aberto { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
+        #voltarLista { display: none; }
+        body.vista-concurso > header, body.vista-concurso > footer,
+        body.vista-modal > header, body.vista-modal > main, body.vista-modal > footer { display: none; }
+        body.vista-concurso main > div:first-of-type { display: none; }
+        body.vista-concurso #voltarLista { display: inline-flex; }
+        body.vista-modal #concursoModal, body.vista-modal #materiasModal {
+            padding: 0; background: white; backdrop-filter: none;
+        }
+        body.vista-modal #concursoModal > div, body.vista-modal #materiasModal > div {
+            max-width: 100%; min-height: 100vh; margin: 0; border-radius: 0; box-shadow: none;
+        }
+        body.vista-modal #materiasListContainer { max-height: none; overflow: visible; }
+        .ranking-barras { width: 100%; max-width: 900px; margin: 0 auto; }
+        .ranking-barra-item { display: block; width: 100%; text-align: left; background: #fff; padding: 8px 10px; margin-bottom: 6px; border: 1px solid #e2e8f0; border-radius: 12px; cursor: pointer; }
+        .ranking-posicao { flex: 0 0 30px; align-self: center; text-align: center; font-size: 14px; font-weight: 800; color: #475569; }
+        .ranking-barra-dados { flex: 1; min-width: 0; }
+        .ranking-barra-item:hover { background: #f8fafc; border-color: #94a3b8; }
+        .ranking-barra-item:focus-visible, .ranking-ver-todos:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+        .ranking-barra-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+        .ranking-barra-nome { font-weight: 700; font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; min-width: 0; }
+        .ranking-barra-qtd { white-space: nowrap; font-size: 12px; color: #475569; padding-top: 2px; }
+        .ranking-barra-trilho { display: block; background: #f1f5f9; height: 9px; border-radius: 6px; overflow: hidden; }
+        .ranking-barra-cor { display: block; height: 100%; border-radius: 8px; }
+        .ranking-barra-materias { display: block; margin-top: 4px; font-size: 10px; line-height: 1.2; color: #64748b; overflow-wrap: anywhere; }
+        .ranking-ver-todos { display: block; min-height: 44px; margin: 18px auto; padding: 10px 18px; border-radius: 8px; border: 1px solid #059669; color: #047857; background: #ecfdf5; cursor: pointer; }
+    .ranking-posicao{flex:0 0 28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#f1f5f9;font-family:Arial,sans-serif;font-size:12px;line-height:1}.ranking-barra-item{align-items:center}@media(max-width:767px){.ranking-barra-nome{font-size:14px;line-height:1.4}.ranking-barra-qtd{font-size:11px}}</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-indigo-700 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap"></i> Concursos & Vagas
+                </h1>
+            </div>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <button onclick="openRankingModal()" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-chart-bar"></i> Conteúdos Mais Cobrados
+                </button>
+                <button onclick="openModal()" class="flex-1 sm:flex-none bg-white text-indigo-700 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-lg shadow transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Novo Concurso
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full">
+        <button id="voltarLista" type="button" onclick="voltarListaConcursos()" class="items-center gap-2 mb-4 px-4 py-2 rounded-lg bg-indigo-700 text-white"><i class="fa-solid fa-arrow-left"></i> Voltar à lista</button>
+        <!-- Search and Counter Bar -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div class="relative w-full sm:w-96">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <i class="fa-solid fa-search"></i>
+                </span>
+                <input type="text" id="searchInput" placeholder="Pesquisar concurso..." 
+                    class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+            </div>
+
+            <div class="flex items-center gap-1 text-xs font-semibold" role="tablist">
+                <button id="abaTodos" role="tab" onclick="mudarAba(false)" class="px-3 py-1.5 rounded-lg transition">Todos</button>
+                <button id="abaFavoritos" role="tab" onclick="mudarAba(true)" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1"><i class="fa-solid fa-star text-[10px]"></i> Favoritos <span id="contFav" class="opacity-70"></span></button>
+            </div>
+
+            <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
+                <span id="dicaOrdenar" class="text-xs text-slate-400"><i class="fa-solid fa-grip-vertical"></i> Arraste para reordenar</span>
+                <span class="text-sm text-slate-500 font-medium" id="totalCount">0 concursos</span>
+            </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div id="concursosTableBody" class="divide-y divide-slate-200"></div>
+            <div id="emptyState" class="hidden p-12 text-center">
+                <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-3"></i>
+                <p id="emptyMsg" class="text-slate-500 font-medium">Nenhum concurso cadastrado ainda.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Add/Edit -->
+    <div id="concursoModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-start justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl max-w-xl w-full overflow-hidden transform transition-all my-auto">
+            <div class="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center">
+                <h3 id="modalTitle" class="font-bold text-lg">Novo / Editar Concurso</h3>
+                <button onclick="closeModal()" aria-label="Voltar" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+            </div>
+            <form id="concursoForm" onsubmit="saveConcurso(event)" class="p-6 space-y-4">
+                <input type="hidden" id="concursoIndex">
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Órgão</label>
+                        <input type="text" id="orgao" required placeholder="Ex: BB, INSS..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Cargo</label>
+                        <input type="text" id="cargo" required placeholder="Ex: Escriturário" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Cores do órgão <span class="normal-case font-normal text-slate-400">(opcional, até 3)</span></label>
+                    <input type="hidden" id="cor">
+                    <div id="corOpcoes" class="flex flex-wrap items-center gap-2.5"></div>
+                    <p id="corAviso" class="text-[11px] text-slate-400 mt-2"></p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nível</label>
+                        <input type="text" id="nivel" required placeholder="Ex: MÉDIO, SUPERIOR" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Salário (R$)</label>
+                        <input type="text" id="salario" required placeholder="Ex: 4.314,69 ou 4.000 / 6.000" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-[11px] text-slate-400 mt-1">Um valor = salário fixo. Dois valores = faixa salarial.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Alimentação e Refeição (R$)</label>
+                        <input type="text" id="ar" placeholder="Ex: 1.173,00 / 924,00" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Jornada</label>
+                        <input type="text" id="jornada" placeholder="Ex: 30h ou 40h" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="situacao" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Situação do concurso</label>
+                    <select id="situacao" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="">Sem situação definida</option>
+                        <option value="previsto">PREVISTO</option>
+                        <option value="aberto">ABERTO</option>
+                        <option value="encerrado">ENCERRADO</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Previsão (Edital / Prova)</label>
+                    <input type="text" id="previsao" placeholder="Ex: 2º Semestre / 2026" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Matérias e Conteúdos</label>
+                    <p class="text-[11px] text-slate-400 mb-2">Toque numa matéria para editar só o conteúdo dela.</p>
+                    <div id="materiasEditor" class="space-y-2"></div>
+                    <p id="materiasVazio" class="hidden text-sm text-slate-400 italic py-2">Nenhuma matéria adicionada ainda.</p>
+                    <button type="button" onclick="adicionarMateria()" class="mt-3 w-full sm:w-auto px-4 py-2 text-sm font-medium text-indigo-700 border border-indigo-200 hover:bg-indigo-50 rounded-lg transition flex items-center justify-center gap-2"><i class="fa-solid fa-plus"></i> Adicionar matéria</button>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 text-sm font-medium bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg shadow transition">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Viewing Materias & Contents -->
+    <div id="materiasModal" role="dialog" aria-modal="true" aria-labelledby="materiasModalTitle" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-start justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden transform transition-all my-auto">
+            <div class="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center">
+                <h3 id="materiasModalTitle" class="font-bold text-lg">Matérias e Conteúdos</h3>
+                <button onclick="closeMateriasModal()" aria-label="Voltar" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+            </div>
+            <div class="p-6">
+                <div id="materiasListContainer" class="space-y-4 max-h-80 overflow-y-auto pr-2">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+            <div class="bg-slate-50 px-6 py-3 flex justify-end border-t border-slate-200">
+                <button onclick="closeMateriasModal()" class="px-4 py-2 text-sm font-medium bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg transition">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Ranking, Charts & Órgãos by Matéria -->
+    <div id="rankingModal" role="dialog" aria-modal="true" class="fixed inset-0 bg-white hidden flex-col z-50">
+        <div class="flex flex-col w-full h-full min-h-0">
+            <div class="bg-emerald-700 text-white px-6 py-4 flex justify-between items-center shrink-0">
+                <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-chart-bar"></i> Conteúdos Mais Cobrados</h3>
+                <button onclick="closeRankingModal()" aria-label="Voltar" class="text-emerald-200 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+            </div>
+            <div class="p-3 sm:p-6 flex-1 overflow-y-auto min-h-0">
+                <p id="instrucaoGrafico" class="text-xs text-slate-500 mb-3">Conteúdos mais cobrados entre os concursos cadastrados. Toque em uma barra para ver quais concursos cobram esse conteúdo. O tamanho da barra compara a quantidade com o conteúdo mais frequente.</p>
+
+                <div id="graficoSection" class="ranking-barras">
+                    <label for="filtroMateria" class="block text-sm font-semibold mb-2">Matéria</label>
+                    <select id="filtroMateria" class="w-full border border-slate-300 rounded-lg px-3 py-2 mb-3"><option value="">Todas as matérias</option></select>
+                    <label for="buscaConteudos" class="block text-sm font-semibold mb-2">Buscar conteúdo</label>
+                    <input id="buscaConteudos" type="search" placeholder="Ex.: Crase" class="w-full border border-slate-300 rounded-lg px-3 py-3 mb-4">
+                    <p id="resumoRanking" class="text-sm text-slate-500 mb-4" aria-live="polite"></p>
+                    <div id="listaBarras"></div>
+                    <button id="verTodosConteudos" type="button" class="ranking-ver-todos">Ver todos os conteúdos</button>
+                </div>
+
+                <!-- Detalhes dos Órgãos ao clicar na matéria -->
+                <div id="orgaoDetalheContainer" class="hidden mt-4 pt-4 border-t border-slate-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 id="detalheMateriaTitulo" class="font-bold text-indigo-700 text-sm">Órgãos para esta matéria</h4>
+                        <button onclick="voltarParaGrafico()" class="text-xs text-indigo-600 hover:underline font-medium"><i class="fa-solid fa-arrow-left"></i> Voltar ao gráfico</button>
+                    </div>
+                    <div id="listaOrgaosPorMateria" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="bg-slate-50 px-6 py-3 flex justify-end border-t border-slate-200 shrink-0">
+                <button onclick="closeRankingModal()" class="px-4 py-2 text-sm font-medium bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+        Versão com caixas de conclusão • Painel de Concursos • Gráficos interativos integrados • Dados salvos automaticamente neste navegador.
+    </footer>
+
+    <script>
+        const defaultConcursos = [
+            { orgao: "BB", cores: ["#facc15", "#2563eb"], cargo: "Escriturário", nivel: "MÉDIO", salario: "4.314,69", ar: "R$ 1173 / 924", jornada: "30h", previsao: "", materias: "Português: Crase, Sintaxe, Interpretação de Texto\nMatemática Financeira: Juros Simples e Compostos, Porcentagem\nInformática: Hardware, Windows, Pacote Office\nConhecimentos Bancários: Sistema Financeiro Nacional, Garantias" },
+            { orgao: "CAIXA", cores: ["#2563eb", "#f97316"], cargo: "TÉC BANCÁRIO", nivel: "MÉDIO", salario: "3.762,00", ar: "R$ 2000", jornada: "30h", previsao: "", materias: "Língua Portuguesa: Compreensão de textos, Ortografia\nMatemática: Razão e Proporção, Estatística Básica\nConhecimentos Bancários: Produtos Bancários, Ética e Compliance" },
+            { orgao: "BC", cargo: "TÉC DO BANCO CENTRAL", nivel: "MÉDIO", salario: "8.300,00", ar: "R$ 1192", jornada: "30h ou 40h", previsao: "", materias: "Português: Redação Oficial, Gramática\nDireito Constitucional: Direitos Fundamentais, Administração Pública\nDireito Administrativo: Atos Administrativos, Licitações" },
+            { orgao: "INSS", cargo: "TÉC DO SEGURO SOCIAL", nivel: "MÉDIO", salario: "6.355,00", ar: "R$ 1192", jornada: "40h", previsao: "", materias: "Português: Coesão e Coerência\nDireito Previdenciário: Seguridade Social, Benefícios do INSS\nDireito Administrativo: Princípios, Poderes Administrativos" },
+            { orgao: "PRF", cargo: "AGENTE ADMINISTRATIVO", nivel: "MÉDIO", salario: "5.100,00", ar: "R$ 1192", jornada: "40h", previsao: "", materias: "Português: Tipologia Textual\nInformática: Redes de Computadores, Segurança da Informação\nArquivologia: Gestão de Documentos" }
+        ];
+
+        function loadConcursos() {
+            try {
+                const d = JSON.parse(localStorage.getItem('concursos_data_v26'));
+                return Array.isArray(d) ? d.filter(x => x && typeof x === 'object') : defaultConcursos;
+            } catch (e) {
+                return defaultConcursos;
+            }
+        }
+
+        let concursos = loadConcursos();
+
+        const semAcento = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        // Converte um valor para o formato de reais: R$ 1.234,56
+        function numeroBR(texto) {
+            const t = texto.trim();
+            let inteiro, dec = '';
+            if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) || /^\d+,\d+$/.test(t) || /^\d+$/.test(t)) {
+                // padrão brasileiro: ponto = milhar, vírgula = centavos
+                [inteiro, dec = ''] = t.split(',');
+                inteiro = inteiro.replace(/\./g, '');
+            } else if (/^\d+\.\d{1,2}$/.test(t)) {
+                // 1173.50
+                [inteiro, dec] = t.split('.');
+            } else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) {
+                // 1,173.50
+                [inteiro, dec = ''] = t.replace(/,/g, '').split('.');
+            } else {
+                return null;
+            }
+            dec = (dec + '00').slice(0, 2);
+            inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return `R$\u00A0${inteiro},${dec}`; // espaço sem quebra: o R$ nunca se separa do valor
+        }
+
+        // Salário: um valor -> "R$ 4.000,00"; dois valores -> "R$ 4.000,00 R$ 6.000,00"
+        function salarioLista(v) {
+            const t = String(v ?? '').trim();
+            if (!t) return [];
+            const numeros = t.match(/\d+(?:[.,]\d+)*/g);
+            if (!numeros) return [t];
+            const fmt = n => numeroBR(n) ?? n;
+            return numeros.slice(0, 2).map(fmt);
+        }
+        const salarioFmt = v => salarioLista(v).join(' ');
+
+        // Cada valor vira um bloco separado, para dar espaço entre eles na tela
+        function valoresHtml(lista) {
+            if (!lista.length) return '';
+            return '<span class="valores">' + lista.map(x => `<span class="valor">${escapeHtml(x)}</span>`).join('') + '</span>';
+        }
+
+        // Aceita um valor ou vários separados por "/" (ex.: Alimentação e Refeição)
+        function moneyLista(v) {
+            const t = String(v ?? '').trim();
+            if (!t) return [];
+            return t.split('/').map(parte => {
+                const limpa = parte.replace(/R\$/gi, '').trim();
+                if (!limpa) return '';
+                return numeroBR(limpa) ?? parte.trim();
+            }).filter(Boolean);
+        }
+        const money = v => moneyLista(v).join(' ');
+
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('concursos_data_v26', JSON.stringify(concursos));
+            } catch (e) {
+                alert('Não foi possível salvar os dados neste navegador. Verifique se o armazenamento está liberado.');
+            }
+        }
+
+        const PALETA_CORES = [
+            ['Branco', '#ffffff'], ['Cinza', '#64748b'], ['Preto', '#1f2937'],
+            ['Amarelo claro', '#fde047'], ['Amarelo', '#facc15'], ['Dourado', '#ca8a04'],
+            ['Laranja', '#f97316'], ['Vermelho', '#dc2626'], ['Vinho', '#991b1b'],
+            ['Rosa', '#ec4899'], ['Roxo', '#7c3aed'],
+            ['Azul-marinho', '#1e3a8a'], ['Azul', '#2563eb'], ['Azul claro', '#38bdf8'], ['Ciano', '#0891b2'],
+            ['Verde claro', '#4ade80'], ['Verde', '#16a34a'], ['Verde-escuro', '#166534']
+        ];
+        // cor clara = número em texto escuro; cor escura = número em texto branco
+        const ehClara = hex => {
+            const n = parseInt(hex.slice(1), 16);
+            return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150;
+        };
+        const MAX_CORES = 3;
+        const corValida = h => /^#[0-9a-f]{6}$/i.test(h || '');
+
+        // aceita o formato novo (cores: [...]) e o antigo (cor: '#...')
+        const coresDe = c => {
+            const lista = Array.isArray(c.cores) ? c.cores : (c.cor ? [c.cor] : []);
+            return lista.filter(corValida).slice(0, MAX_CORES);
+        };
+        const lerCores = () => document.getElementById('cor').value.split(',').filter(corValida);
+
+        function definirCores(lista, aviso = '') {
+            const cores = [...new Set((lista || []).filter(corValida).map(h => h.toLowerCase()))].slice(0, MAX_CORES);
+            document.getElementById('cor').value = cores.join(',');
+            desenharSeletorCor(cores, aviso);
+        }
+
+        function alternarCor(hex) {
+            const atuais = lerCores();
+            if (atuais.includes(hex)) return definirCores(atuais.filter(h => h !== hex));
+            if (atuais.length >= MAX_CORES) {
+                return definirCores(atuais, 'Máximo de 3 cores. Toque numa cor selecionada para tirá-la.');
+            }
+            definirCores([...atuais, hex]);
+        }
+
+        function desenharSeletorCor(cores, aviso) {
+            const box = document.getElementById('corOpcoes');
+            box.innerHTML = '';
+            const cheio = cores.length >= MAX_CORES;
+            const base = 'w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400';
+            const anel = ' ring-2 ring-offset-2 ring-slate-700';
+
+            const semCor = document.createElement('button');
+            semCor.type = 'button';
+            semCor.title = 'Sem cor (padrão)';
+            semCor.setAttribute('aria-label', 'Sem cor (padrão)');
+            semCor.className = base + ' bg-white text-slate-400 text-xs' + (cores.length === 0 ? anel : '');
+            semCor.innerHTML = '<i class="fa-solid fa-ban"></i>';
+            semCor.onclick = () => definirCores([]);
+            box.appendChild(semCor);
+
+            const criar = (hex, nome) => {
+                const pos = cores.indexOf(hex);
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.title = nome;
+                b.setAttribute('aria-label', nome);
+                b.className = base + (pos >= 0 ? anel : (cheio ? ' opacity-40' : ''));
+                b.style.background = hex;
+                if (pos >= 0) {
+                    b.innerHTML = ehClara(hex)
+                        ? `<span class="text-[11px] font-bold text-slate-700">${pos + 1}</span>`
+                        : `<span class="text-[11px] font-bold text-white" style="text-shadow:0 0 3px rgba(0,0,0,.85)">${pos + 1}</span>`;
+                }
+                b.onclick = () => alternarCor(hex);
+                return b;
+            };
+
+            PALETA_CORES.forEach(([nome, hex]) => box.appendChild(criar(hex, nome)));
+            cores.filter(h => !PALETA_CORES.some(([, p]) => p === h))
+                 .forEach(h => box.appendChild(criar(h, 'Cor personalizada (toque para remover)')));
+
+            const outra = document.createElement('label');
+            outra.title = 'Outra cor';
+            outra.className = 'cor-outra relative w-8 h-8 rounded-full border border-slate-300 cursor-pointer overflow-hidden transition' + (cheio ? ' opacity-40' : '');
+            outra.innerHTML = '<input type="color" value="#2563eb" aria-label="Escolher outra cor" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">';
+            outra.querySelector('input').addEventListener('change', (e) => {
+                const v = e.target.value.toLowerCase();
+                if (!lerCores().includes(v)) alternarCor(v);
+            });
+            box.appendChild(outra);
+
+            const av = document.getElementById('corAviso');
+            av.textContent = aviso || (cores.length
+                ? `${cores.length} de ${MAX_CORES} cores selecionadas (na ordem em que aparecem)`
+                : 'Escolha até 3 cores, ou deixe sem cor.');
+            av.classList.toggle('text-rose-500', !!aviso);
+            av.classList.toggle('text-slate-400', !aviso);
+        }
+
+        const abertos = new Set();
+        let concursoAberto = null;
+
+        function voltarListaConcursos() {
+            abertos.clear();
+            concursoAberto = null;
+            document.body.classList.remove('vista-concurso');
+            renderTable(document.getElementById('searchInput').value);
+            window.scrollTo(0, 0);
+        }
+
+        function atualizarVistaModal() {
+            const aberto = ['concursoModal', 'materiasModal', 'rankingModal']
+                .some(id => !document.getElementById(id).classList.contains('hidden'));
+            document.body.classList.toggle('vista-modal', aberto);
+            if (aberto) window.scrollTo(0, 0);
+        }
+
+        function campoHtml(rotulo, conteudo) {
+            return `<div><dt class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">${rotulo}</dt><dd class="mt-0.5">${conteudo}</dd></div>`;
+        }
+
+        let soFavoritos = false;
+
+        function atualizarAbas() {
+            const on = 'bg-indigo-600 text-white', off = 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+            document.getElementById('abaTodos').className = `px-3 py-1.5 rounded-lg transition ${soFavoritos ? off : on}`;
+            document.getElementById('abaFavoritos').className = `px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${soFavoritos ? on : off}`;
+            document.getElementById('abaTodos').setAttribute('aria-selected', !soFavoritos);
+            document.getElementById('abaFavoritos').setAttribute('aria-selected', soFavoritos);
+            const n = concursos.filter(c => c.fav).length;
+            document.getElementById('contFav').innerText = n ? `(${n})` : '';
+        }
+
+        function mudarAba(favoritos) {
+            soFavoritos = favoritos;
+            renderTable(document.getElementById('searchInput').value);
+        }
+
+        function alternarFavorito(c) {
+            c.fav = !c.fav;
+            saveToLocalStorage();
+            renderTable(document.getElementById('searchInput').value);
+        }
+
+        function renderTable(filterText = '') {
+            const tbody = document.getElementById('concursosTableBody');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            const termo = semAcento(filterText);
+            const semFiltro = termo === '';
+            const base = soFavoritos ? concursos.filter(c => c.fav) : concursos;
+            atualizarAbas();
+            const filtered = base.filter(c =>
+                semAcento(c.orgao).includes(termo) ||
+                semAcento(c.cargo).includes(termo) ||
+                semAcento(c.nivel).includes(termo) ||
+                semAcento(c.materias).includes(termo)
+            );
+
+            const unidade = soFavoritos ? 'favorito(s)' : 'concurso(s)';
+            document.getElementById('totalCount').innerText = semFiltro ? `${base.length} ${unidade}` : `${filtered.length} de ${base.length} ${unidade}`;
+
+            if (filtered.length === 0) {
+                document.getElementById('emptyMsg').innerText = base.length === 0
+                    ? (soFavoritos ? 'Nenhum favorito ainda. Toque na estrelinha de um concurso para favoritar.' : 'Nenhum concurso cadastrado ainda.')
+                    : 'Nenhum concurso encontrado para essa busca.';
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            const toque = window.matchMedia('(pointer: coarse)').matches;
+            const reordenavel = semFiltro && !soFavoritos;   // reordenar só na lista completa
+            const podeArrastar = reordenavel && !toque;   // arrastar com mouse (computador)
+            const podeToque = reordenavel && toque;       // arrastar com o dedo (celular/tablet)
+            document.getElementById('dicaOrdenar').classList.toggle('hidden', soFavoritos);
+
+            filtered.forEach((c) => {
+                if (concursoAberto && c !== concursoAberto) return;
+                const originalIndex = concursos.indexOf(c);
+                const aberto = abertos.has(c);
+                const cores = coresDe(c);
+
+                let materiasHtml = '<span class="text-slate-400 italic text-xs">Nenhuma matéria cadastrada</span>';
+                if (c.materias && c.materias.trim() !== '') {
+                    materiasHtml = `<button onclick="openMateriasModal(${originalIndex})" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium px-3 py-2 rounded-full text-xs transition flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-book-open"></i> Ver Matérias & Conteúdos
+                    </button>`;
+                }
+
+                const item = document.createElement('div');
+                if (cores.length === 0) {
+                    item.style.borderLeft = '10px solid transparent';
+                } else if (cores.length === 1) {
+                    item.style.borderLeft = `10px solid ${cores[0]}`;
+                } else {
+                    // faixa dividida em partes iguais, uma para cada cor
+                    const n = cores.length;
+                    const partes = cores.map((cor, i) => `${cor} ${(i * 100) / n}% ${((i + 1) * 100) / n}%`).join(', ');
+                    item.style.borderLeft = '10px solid';
+                    item.style.borderImage = `linear-gradient(to bottom, ${partes}) 1`;
+                }
+
+                // Parte de fora: só o nome do órgão
+                const header = document.createElement('div');
+                header.className = 'flex items-center gap-3 px-4 py-4 hover:bg-slate-50 transition select-none';
+                header.style.position = 'relative';
+                header.dataset.index = originalIndex;
+                if (cores.length === 1) {
+                    header.style.background = cores[0] + '22';
+                } else if (cores.length > 1) {
+                    header.style.background = `linear-gradient(to right, ${cores.map(cor => cor + '26').join(', ')})`;
+                }
+                header.setAttribute('draggable', podeArrastar);
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+                header.setAttribute('aria-expanded', aberto);
+                header.innerHTML = `
+                    ${podeToque
+                        ? '<span class="handle-toque -ml-2 px-3 py-2 text-slate-400 text-lg" aria-label="Segure e arraste para reordenar"><i class="fa-solid fa-grip-vertical"></i></span>'
+                        : `<i class="fa-solid fa-grip-vertical text-slate-300 ${podeArrastar ? '' : 'hidden'}"></i>`}
+                    <span class="flex-1 font-bold ${cores.length ? 'text-slate-800' : 'text-indigo-700'} text-base">${escapeHtml(c.orgao)}</span>
+                    <span class="situacao-concurso">${c.situacao === 'previsto' ? '<span class="situacao-selo situacao-previsto">PREVISTO</span>' : c.situacao === 'aberto' ? '<span class="situacao-selo situacao-aberto">ABERTO</span>' : c.situacao === 'encerrado' ? '<span class="situacao-selo situacao-encerrado">ENCERRADO</span>' : ''}</span>
+                    <button type="button" class="btn-fav px-1.5 py-1 -my-1 text-xs leading-none transition ${c.fav ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'}" aria-pressed="${!!c.fav}" aria-label="${c.fav ? 'Remover dos favoritos' : 'Favoritar'}" title="${c.fav ? 'Remover dos favoritos' : 'Favoritar'}"><i class="${c.fav ? 'fa-solid' : 'fa-regular'} fa-star"></i></button>
+                    <i class="chevron fa-solid fa-chevron-down text-slate-400 transition-transform ${aberto ? 'rotate-180' : ''}"></i>`;
+
+                const btnFav = header.querySelector('.btn-fav');
+                ['click', 'keydown', 'touchstart', 'mousedown'].forEach(ev => btnFav.addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
+                btnFav.addEventListener('click', () => alternarFavorito(c));
+                btnFav.setAttribute('draggable', 'false');
+
+                const alca = header.querySelector('.handle-toque');
+                if (alca) {
+                    alca.addEventListener('touchstart', (e) => prepararArrasteToque(e, item, originalIndex), { passive: true });
+                    alca.addEventListener('contextmenu', (e) => e.preventDefault());
+                    alca.addEventListener('click', (e) => e.stopPropagation());
+                }
+
+                header.addEventListener('dragstart', handleDragStart);
+                header.addEventListener('dragover', handleDragOver);
+                header.addEventListener('drop', handleDrop);
+                header.addEventListener('dragend', handleDragEnd);
+
+                // Ao clicar: todas as informações da vaga
+                const painel = document.createElement('div');
+                painel.className = `${aberto ? '' : 'hidden'} bg-white border-t border-slate-100 px-4 py-5`;
+                painel.innerHTML = `
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+                        ${campoHtml('Cargo', `<span class="font-medium text-slate-800">${escapeHtml(c.cargo)}</span>`)}
+                        ${campoHtml('Nível', `<span class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-xs font-semibold">${escapeHtml(c.nivel)}</span>`)}
+                        ${campoHtml('Salário', `<div class="text-emerald-600 font-semibold">${valoresHtml(salarioLista(c.salario)) || '-'}</div>`)}
+                        ${campoHtml('Alimentação e Refeição', `<div class="text-emerald-600 font-semibold">${valoresHtml(moneyLista(c.ar)) || '-'}</div>`)}
+                        ${campoHtml('Jornada', `<span class="text-slate-600">${escapeHtml(c.jornada)}</span>`)}
+                        ${campoHtml('Previsão', `<span class="text-amber-600 font-medium">${escapeHtml(c.previsao || '-')}</span>`)}
+                    </dl>
+                    <div class="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-slate-200">
+                        <div>${materiasHtml}</div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="editConcurso(${originalIndex})" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-white border border-slate-200 transition" aria-label="Editar"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                            <button onclick="deleteConcurso(${originalIndex})" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-rose-600 hover:bg-white border border-slate-200 transition" aria-label="Excluir"><i class="fa-solid fa-trash"></i> Excluir</button>
+                        </div>
+                    </div>`;
+
+                const alternar = () => {
+                    if (Date.now() < bloqueioCliqueAte) return;
+                    if (concursoAberto === c) return;
+                    concursoAberto = c;
+                    abertos.add(c);
+                    document.body.classList.add('vista-concurso');
+                    renderTable(document.getElementById('searchInput').value);
+                    window.scrollTo(0, 0);
+                };
+                header.addEventListener('click', alternar);
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); }
+                });
+
+                item.appendChild(header);
+                item.appendChild(painel);
+                tbody.appendChild(item);
+            });
+        }
+
+        let mapaMateriasOrgaos = Object.create(null);
+        let mostrarTodosConteudos = false;
+
+        function openRankingModal() {
+            mapaMateriasOrgaos = Object.create(null);
+            mostrarTodosConteudos = false;
+            document.getElementById('buscaConteudos').value = '';
+
+            concursos.forEach(c => {
+                if (!c.materias) return;
+                c.materias.split(/\n/).forEach(linha => {
+                    const l = linha.trim();
+                    if (!l || !l.includes(':')) return;
+                    const i = l.indexOf(':');
+                    const nomeMateria = l.slice(0, i).trim();
+                    l.slice(i + 1).split(',').forEach(cont => {
+                        const nome = cont.trim().replace(/^(?:\]\s*)+/, '').trim();
+                        const chave = semAcento(nome);
+                        if (!chave) return;
+                        if (!mapaMateriasOrgaos[chave]) {
+                            mapaMateriasOrgaos[chave] = { nome, materias: [], orgaos: [] };
+                        }
+                        const reg = mapaMateriasOrgaos[chave];
+                        if (nomeMateria && !reg.materias.includes(nomeMateria)) reg.materias.push(nomeMateria);
+                        let item = reg.orgaos.find(item => item.orgao === c.orgao && item.cargo === c.cargo);
+                        if (!item) {
+                            item = { orgao: c.orgao, cargo: c.cargo, materias: [] };
+                            reg.orgaos.push(item);
+                        }
+                        if (nomeMateria && !item.materias.includes(nomeMateria)) item.materias.push(nomeMateria);
+                    });
+                });
+            });
+
+            const seletor = document.getElementById('filtroMateria');
+            seletor.innerHTML = '<option value="">Todas as matérias</option>';
+            const materias = new Map();
+            Object.values(mapaMateriasOrgaos).forEach(reg => reg.materias.forEach(nome => {
+                if (!materias.has(semAcento(nome))) materias.set(semAcento(nome), nome);
+            }));
+            [...materias.entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).forEach(([valor, nome]) => {
+                const opcao = document.createElement('option');
+                opcao.value = valor;
+                opcao.textContent = nome;
+                seletor.appendChild(opcao);
+            });
+            voltarParaGrafico();
+            document.getElementById('rankingModal').classList.remove('hidden');
+            document.getElementById('rankingModal').classList.add('flex');
+            atualizarVistaModal();
+        }
+
+        function registroFiltrado(reg) {
+            const materia = document.getElementById('filtroMateria').value;
+            if (!materia) return reg;
+            return { ...reg,
+                materias: reg.materias.filter(nome => semAcento(nome) === materia),
+                orgaos: reg.orgaos.filter(item => item.materias.some(nome => semAcento(nome) === materia))
+            };
+        }
+
+        function atualizarVisualizacaoGrafico() {
+            const ranking = Object.entries(mapaMateriasOrgaos)
+                .map(([chave, reg]) => [chave, registroFiltrado(reg)])
+                .filter(([, reg]) => reg.orgaos.length > 0)
+                .sort((a, b) => b[1].orgaos.length - a[1].orgaos.length || a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+            const termo = semAcento(document.getElementById('buscaConteudos').value);
+            const filtrados = ranking.filter(([, reg]) => semAcento(reg.nome).includes(termo));
+            const visiveis = mostrarTodosConteudos || termo ? filtrados : filtrados.slice(0, 10);
+            const lista = document.getElementById('listaBarras');
+            lista.innerHTML = '';
+            document.getElementById('resumoRanking').textContent = `${visiveis.length} de ${filtrados.length} conteúdos • ${concursos.length} concursos cadastrados`;
+            const cores = ['#2563eb', '#059669', '#7c3aed', '#ea580c', '#db2777', '#0891b2', '#4f46e5', '#b45309'];
+            const maior = ranking.length ? ranking[0][1].orgaos.length : 1;
+            visiveis.forEach(([chave, reg]) => {
+                const qtd = reg.orgaos.length;
+                const cor = cores[ranking.findIndex(([k]) => k === chave) % cores.length];
+                const botao = document.createElement('button');
+                botao.type = 'button';
+                botao.className = 'ranking-barra-item';
+                botao.style.display = 'flex';
+                botao.style.gap = '10px';
+                botao.innerHTML = `<span class="ranking-barra-topo"><span class="ranking-barra-nome">${escapeHtml(reg.nome)}</span><span class="ranking-barra-qtd">${qtd} ${qtd === 1 ? 'concurso' : 'concursos'}</span></span><span class="ranking-barra-trilho" aria-hidden="true"><span class="ranking-barra-cor" style="width:${qtd / maior * 100}%;background:${cor}"></span></span><span class="ranking-barra-materias">${escapeHtml(reg.materias.join(' • '))}</span>`;
+                const posicao = ranking.findIndex(([k]) => k === chave) + 1;
+                botao.innerHTML = `<span class="ranking-posicao" aria-label="Posição ${posicao}">${posicao}</span><span class="ranking-barra-dados">${botao.innerHTML}</span>`;
+                botao.addEventListener('click', () => mostrarOrgaosDaMateria(chave));
+                lista.appendChild(botao);
+            });
+            if (!visiveis.length) lista.textContent = ranking.length ? 'Nenhum conteúdo encontrado para essa busca.' : 'Nenhum conteúdo registrado nos concursos ainda.';
+            const verTodos = document.getElementById('verTodosConteudos');
+            verTodos.classList.toggle('hidden', !!termo || filtrados.length <= 10);
+            verTodos.textContent = mostrarTodosConteudos ? 'Mostrar somente os 10 primeiros' : 'Ver todos os conteúdos';
+        }
+
+        function mostrarOrgaosDaMateria(chave) {
+            document.getElementById('graficoSection').classList.add('hidden');
+            document.getElementById('instrucaoGrafico').classList.add('hidden');
+
+            const reg = registroFiltrado(mapaMateriasOrgaos[chave] || { nome: '', materias: [], orgaos: [] });
+            document.getElementById('orgaoDetalheContainer').classList.remove('hidden');
+            document.getElementById('detalheMateriaTitulo').innerText =
+                `Órgãos que cobram: ${reg.nome}` + (reg.materias.length ? ` (${reg.materias.join(' • ')})` : '');
+
+            const listaEl = document.getElementById('listaOrgaosPorMateria');
+            listaEl.innerHTML = '';
+            reg.orgaos.forEach(item => {
+                const li = document.createElement('div');
+                li.className = "bg-indigo-50/60 border border-indigo-100 p-2.5 rounded-lg flex items-center justify-between text-xs";
+                li.innerHTML = `
+                    <span class="font-bold text-indigo-700"><i class="fa-solid fa-building-columns mr-1"></i> ${escapeHtml(item.orgao)}</span>
+                    <span class="text-slate-600">${escapeHtml(item.cargo)}</span>
+                `;
+                listaEl.appendChild(li);
+            });
+        }
+
+        function voltarParaGrafico() {
+            document.getElementById('orgaoDetalheContainer').classList.add('hidden');
+            document.getElementById('instrucaoGrafico').classList.remove('hidden');
+            document.getElementById('graficoSection').classList.remove('hidden');
+            atualizarVisualizacaoGrafico();
+        }
+
+        function closeRankingModal() {
+            document.getElementById('rankingModal').classList.remove('flex');
+            document.getElementById('rankingModal').classList.add('hidden');
+            atualizarVistaModal();
+        }
+
+        let bloqueioCliqueAte = 0;
+        const TEMPO_PRESSIONAR = 400;   // ms segurando o ícone antes de poder arrastar
+
+        // Começa a contar quando o dedo toca no ícone. Só vira "arrastar" se o dedo
+        // ficar parado segurando; se mexer antes disso, é rolagem normal da página.
+        function prepararArrasteToque(e, item, origem) {
+            const alca = e.currentTarget;
+            const toque = e.touches[0];
+            const x0 = toque.clientX, y0 = toque.clientY;
+            let arrasto = null;
+
+            const timer = setTimeout(() => {
+                arrasto = iniciarArrasteToque(item, origem, y0);
+                if (arrasto && navigator.vibrate) navigator.vibrate(30);
+            }, TEMPO_PRESSIONAR);
+
+            const limpar = () => {
+                clearTimeout(timer);
+                alca.removeEventListener('touchmove', mover);
+                alca.removeEventListener('touchend', soltar);
+                alca.removeEventListener('touchcancel', cancelar);
+            };
+            function mover(ev) {
+                const t = ev.touches[0];
+                if (!arrasto) {
+                    // dedo andou antes de completar o "segurar": era rolagem, então desiste
+                    if (Math.hypot(t.clientX - x0, t.clientY - y0) > 10) limpar();
+                    return;
+                }
+                ev.preventDefault();   // já está arrastando: não deixa a página rolar
+                arrasto.mover(t.clientY);
+            }
+            function soltar() { const a = arrasto; limpar(); if (a) a.terminar(true); }
+            function cancelar() { const a = arrasto; limpar(); if (a) a.terminar(false); }
+
+            alca.addEventListener('touchmove', mover, { passive: false });
+            alca.addEventListener('touchend', soltar);
+            alca.addEventListener('touchcancel', cancelar);
+        }
+
+        function iniciarArrasteToque(item, origem, yInicial) {
+            const lista = document.getElementById('concursosTableBody');
+            const itens = Array.from(lista.children);
+            if (itens.length !== concursos.length) return null;
+
+            // recolhe o painel do item arrastado para ele ficar compacto
+            item.children[1].classList.add('hidden');
+
+            const topoPagina = () => window.scrollY;
+            const rects = itens.map(el => {
+                const r = el.getBoundingClientRect();
+                return { top: r.top + topoPagina(), height: r.height };
+            });
+            const altura = rects[origem].height;
+            const inicioPageY = yInicial + topoPagina();
+            let clientY = yInicial;
+            let destino = origem;
+            let rolagem = 0;
+
+            item.classList.add('arrastando-toque');
+            item.style.position = 'relative';
+            item.style.zIndex = '20';
+            itens.forEach(el => { if (el !== item) el.style.transition = 'transform .15s ease'; });
+
+            const atualizar = () => {
+                const dy = (clientY + topoPagina()) - inicioPageY;
+                item.style.transform = `translateY(${dy}px)`;
+                const centro = rects[origem].top + altura / 2 + dy;
+
+                let novo = 0;
+                rects.forEach((r, i) => { if (i !== origem && r.top + r.height / 2 < centro) novo++; });
+                destino = novo;
+
+                itens.forEach((el, i) => {
+                    if (i === origem) return;
+                    let desloc = 0;
+                    if (origem < destino && i > origem && i <= destino) desloc = -altura;
+                    if (origem > destino && i < origem && i >= destino) desloc = altura;
+                    el.style.transform = desloc ? `translateY(${desloc}px)` : '';
+                });
+            };
+
+            const rolar = () => {
+                if (rolagem) { window.scrollBy(0, rolagem); atualizar(); }
+                rafId = requestAnimationFrame(rolar);
+            };
+            let rafId = requestAnimationFrame(rolar);
+
+            atualizar();
+
+            return {
+                mover(y) {
+                    clientY = y;
+                    rolagem = y < 90 ? -12 : (y > window.innerHeight - 90 ? 12 : 0);
+                    atualizar();
+                },
+                terminar(confirmar) {
+                    cancelAnimationFrame(rafId);
+                    bloqueioCliqueAte = Date.now() + 400;
+                    if (confirmar && destino !== origem) {
+                        const movido = concursos.splice(origem, 1)[0];
+                        concursos.splice(destino, 0, movido);
+                        saveToLocalStorage();
+                    }
+                    renderTable(document.getElementById('searchInput').value);
+                }
+            };
+        }
+
+        let draggedIndex = null;
+        function handleDragStart(e) { draggedIndex = parseInt(this.dataset.index); this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; }
+        function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetIndex = parseInt(this.dataset.index);
+            if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                const movedItem = concursos.splice(draggedIndex, 1)[0];
+                concursos.splice(targetIndex, 0, movedItem);
+                saveToLocalStorage();
+                renderTable(document.getElementById('searchInput').value);
+            }
+        }
+        function handleDragEnd() { this.classList.remove('dragging'); draggedIndex = null; }
+
+        function openMateriasModal(index) {
+            const c = concursos[index];
+            document.getElementById('materiasModalTitle').innerText = `${c.orgao} - ${c.cargo}`;
+            const container = document.getElementById('materiasListContainer');
+            container.innerHTML = '';
+            if (!c.materias || c.materias.trim() === '') {
+                container.innerHTML = '<p class="text-slate-400 italic text-sm">Nenhuma matéria cadastrada.</p>';
+            } else {
+                c.materias.split(/\n/).filter(l => l.trim().length > 0).forEach(linha => {
+                    const card = document.createElement('div');
+                    card.className = "bg-slate-50 p-3 rounded-lg border border-slate-200";
+                    if (linha.includes(':')) {
+                        const partes = linha.split(':');
+                        const nome = partes[0].trim();
+                        const conteudos = partes.slice(1).join(':').trim();
+                        let subHtml = '';
+                        if (conteudos) {
+                            subHtml = '<ul class="mt-2 space-y-2 pl-4 border-l-2 border-indigo-200">' +
+                                conteudos.split(',').map(i => i.trim()).filter(Boolean).map(conteudo => {
+                                    const chave = JSON.stringify([semAcento(nome), semAcento(conteudo)]);
+                                    const marcado = Array.isArray(c.concluidos) && c.concluidos.includes(chave);
+                                    return `<li><label class="flex items-start gap-2 cursor-pointer py-1 text-sm text-slate-600"><input type="checkbox" class="conteudo-concluido mt-1 w-4 h-4 shrink-0" data-chave="${escapeHtml(chave)}" ${marcado ? 'checked' : ''}><span class="${marcado ? 'line-through text-slate-400' : ''}">${escapeHtml(conteudo)}</span></label></li>`;
+                                }).join('') + '</ul>';
+                        }
+                        card.innerHTML = `<h4 class="font-bold text-indigo-700 text-sm flex items-center gap-2"><i class="fa-solid fa-book"></i> ${escapeHtml(nome)}</h4>${subHtml}`;
+                    } else {
+                        card.innerHTML = linha.split(',').map(x => x.trim()).filter(Boolean).map(conteudo => {
+                            const chave = JSON.stringify(['', semAcento(conteudo)]);
+                            const marcado = Array.isArray(c.concluidos) && c.concluidos.includes(chave);
+                            return `<label class="flex items-start gap-2 cursor-pointer py-1 text-sm text-slate-600"><input type="checkbox" class="conteudo-concluido mt-1 w-4 h-4 shrink-0" data-chave="${escapeHtml(chave)}" ${marcado ? 'checked' : ''}><span class="${marcado ? 'line-through text-slate-400' : ''}">${escapeHtml(conteudo)}</span></label>`;
+                        }).join('');
+                    }
+                    card.querySelectorAll('.conteudo-concluido').forEach(caixa => {
+                        caixa.addEventListener('change', () => {
+                            const feitas = new Set(Array.isArray(c.concluidos) ? c.concluidos : []);
+                            if (caixa.checked) feitas.add(caixa.dataset.chave);
+                            else feitas.delete(caixa.dataset.chave);
+                            c.concluidos = [...feitas];
+                            const texto = caixa.nextElementSibling;
+                            texto.classList.toggle('line-through', caixa.checked);
+                            texto.classList.toggle('text-slate-400', caixa.checked);
+                            saveToLocalStorage();
+                        });
+                    });
+                    container.appendChild(card);
+                });
+            }
+            document.getElementById('materiasModal').classList.remove('hidden');
+            document.getElementById('materiasModal').classList.add('flex');
+            atualizarVistaModal();
+        }
+
+        function closeMateriasModal() {
+            document.getElementById('materiasModal').classList.remove('flex');
+            document.getElementById('materiasModal').classList.add('hidden');
+            atualizarVistaModal();
+        }
+
+        // ---- Editor de matérias: cada matéria é um título que abre o próprio conteúdo ----
+        // Formato guardado (igual ao de antes): uma linha por matéria -> "Nome: conteúdo 1, conteúdo 2"
+        function parsearMaterias(texto) {
+            return String(texto || '').split('\n').map(l => l.trim()).filter(Boolean).map(linha => {
+                const i = linha.indexOf(':');
+                return i >= 0
+                    ? { nome: linha.slice(0, i).trim(), conteudo: linha.slice(i + 1).trim() }
+                    : { nome: linha, conteudo: '' };
+            });
+        }
+
+        function serializarMaterias(lista) {
+            return lista.map(({ nome, conteudo }) => {
+                const n = String(nome || '').replace(/[:\n]/g, ' ').replace(/\s+/g, ' ').trim();
+                const c = String(conteudo || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean).join(', ');
+                if (!n && !c) return '';
+                return c ? `${n || 'Sem nome'}: ${c}` : n;
+            }).filter(Boolean).join('\n');
+        }
+
+        function limparConteudosColados(texto) {
+            return texto.split(/\r?\n/).map(linha => {
+                let t = linha.trim();
+                if (/^#{1,6}\s/.test(t)) return '';
+                t = t.replace(/^[-*+]\s+\[[ xX]\]\s*/, '')
+                     .replace(/^\[[ xX]\]\s*/, '')
+                     .replace(/^[☐☑✅]\s*/, '')
+                     .replace(/^[-*+]\s+/, '')
+                     .replace(/^\d+\s*[—–-]\s*/, '')
+                     .replace(/^\d+[.)]\s+/, '');
+                return t.trim();
+            }).filter(Boolean).join(', ');
+        }
+
+        function resumoConteudo(texto) {
+            const n = texto.split(/[,\n]/).map(x => x.trim()).filter(Boolean).length;
+            return n === 0 ? 'sem conteúdo' : (n === 1 ? '1 conteúdo' : `${n} conteúdos`);
+        }
+
+        function atualizarMateriasVazio() {
+            const tem = document.querySelectorAll('#materiasEditor .materia-linha').length > 0;
+            document.getElementById('materiasVazio').classList.toggle('hidden', tem);
+        }
+
+        function criarLinhaMateria(nome = '', conteudo = '', aberta = false) {
+            const linha = document.createElement('div');
+            linha.className = 'materia-linha border border-slate-200 rounded-lg overflow-hidden bg-white';
+            linha.innerHTML = `
+                <div class="m-cab flex items-center gap-2 px-3 py-3 bg-slate-50 cursor-pointer select-none" role="button" tabindex="0" aria-expanded="false">
+                    <i class="m-seta fa-solid fa-chevron-right text-slate-400 text-xs w-3 transition-transform"></i>
+                    <span class="m-titulo flex-1 font-semibold text-sm truncate"></span>
+                    <span class="m-resumo text-[11px] text-slate-400 whitespace-nowrap"></span>
+                    <button type="button" class="m-remover text-slate-400 hover:text-rose-600 p-2 -mr-1" aria-label="Remover matéria" title="Remover matéria"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div class="m-corpo hidden px-3 py-3 border-t border-slate-100 space-y-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Nome da matéria</label>
+                        <input type="text" class="m-nome w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Português">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Conteúdos</label>
+                        <textarea rows="4" class="m-conteudo w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Crase, Concordância, Sintaxe"></textarea>
+                        <p class="text-[11px] text-slate-400 mt-1">Separe os conteúdos por vírgula.</p>
+                    </div>
+                </div>`;
+
+            const cab = linha.querySelector('.m-cab');
+            const seta = linha.querySelector('.m-seta');
+            const corpo = linha.querySelector('.m-corpo');
+            const titulo = linha.querySelector('.m-titulo');
+            const resumo = linha.querySelector('.m-resumo');
+            const inNome = linha.querySelector('.m-nome');
+            const inCont = linha.querySelector('.m-conteudo');
+
+            inNome.value = nome;
+            inCont.value = conteudo;
+
+            const atualizarTitulo = () => {
+                const t = inNome.value.trim();
+                titulo.textContent = t || 'Nova matéria';
+                titulo.classList.toggle('text-indigo-700', !!t);
+                titulo.classList.toggle('text-slate-400', !t);
+            };
+            const atualizarResumo = () => { resumo.textContent = resumoConteudo(inCont.value); };
+            const mostrar = (abrir) => {
+                corpo.classList.toggle('hidden', !abrir);
+                seta.classList.toggle('rotate-90', abrir);
+                cab.setAttribute('aria-expanded', abrir);
+            };
+
+            atualizarTitulo();
+            atualizarResumo();
+            mostrar(aberta);
+
+            cab.addEventListener('click', () => mostrar(corpo.classList.contains('hidden')));
+            cab.addEventListener('keydown', (e) => {
+                if (e.target === cab && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    mostrar(corpo.classList.contains('hidden'));
+                }
+            });
+            inNome.addEventListener('input', atualizarTitulo);
+            inNome.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); inCont.focus(); }
+            });
+            inCont.addEventListener('input', atualizarResumo);
+            inCont.addEventListener('paste', (e) => {
+                if (!e.clipboardData) return;
+                const texto = e.clipboardData.getData('text/plain');
+                if (!texto) return;
+                e.preventDefault();
+                inCont.setRangeText(limparConteudosColados(texto), inCont.selectionStart, inCont.selectionEnd, 'end');
+                inCont.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            linha.querySelector('.m-remover').addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (inCont.value.trim() && !confirm(`Remover a matéria "${inNome.value.trim() || 'sem nome'}" e o conteúdo dela?`)) return;
+                linha.remove();
+                atualizarMateriasVazio();
+            });
+            return linha;
+        }
+
+        function carregarMateriasEditor(texto) {
+            const box = document.getElementById('materiasEditor');
+            box.innerHTML = '';
+            parsearMaterias(texto).forEach(m => box.appendChild(criarLinhaMateria(m.nome, m.conteudo, false)));
+            atualizarMateriasVazio();
+        }
+
+        function lerMateriasEditor() {
+            return serializarMaterias(Array.from(document.querySelectorAll('#materiasEditor .materia-linha')).map(l => ({
+                nome: l.querySelector('.m-nome').value,
+                conteudo: l.querySelector('.m-conteudo').value
+            })));
+        }
+
+        function adicionarMateria() {
+            const linha = criarLinhaMateria('', '', true);
+            document.getElementById('materiasEditor').appendChild(linha);
+            atualizarMateriasVazio();
+            linha.querySelector('.m-nome').focus();
+            linha.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function openModal(index = null) {
+            const modal = document.getElementById('concursoModal');
+            document.getElementById('concursoForm').reset();
+            
+            if (index !== null) {
+                document.getElementById('concursoIndex').value = index;
+                const c = concursos[index];
+                document.getElementById('orgao').value = c.orgao;
+                document.getElementById('cargo').value = c.cargo;
+                document.getElementById('nivel').value = c.nivel;
+                document.getElementById('salario').value = c.salario;
+                document.getElementById('ar').value = c.ar ? c.ar.replace(/^R\$\s*/i, '') : '';
+                document.getElementById('jornada').value = c.jornada;
+                document.getElementById('previsao').value = c.previsao || '';
+                document.getElementById('situacao').value = ['previsto', 'aberto', 'encerrado'].includes(c.situacao) ? c.situacao : '';
+                carregarMateriasEditor(c.materias);
+                definirCores(coresDe(c));
+            } else {
+                document.getElementById('concursoIndex').value = '';
+                definirCores([]);
+                carregarMateriasEditor('');
+            }
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            atualizarVistaModal();
+        }
+
+        function closeModal() {
+            document.getElementById('concursoModal').classList.remove('flex');
+            document.getElementById('concursoModal').classList.add('hidden');
+            atualizarVistaModal();
+        }
+
+        function saveConcurso(event) {
+            event.preventDefault();
+            const index = document.getElementById('concursoIndex').value;
+            let arVal = document.getElementById('ar').value.trim();
+            if (arVal && !arVal.toUpperCase().includes('R$')) {
+                arVal = 'R$ ' + arVal;
+            }
+
+            const data = {
+                orgao: document.getElementById('orgao').value.trim(),
+                cargo: document.getElementById('cargo').value.trim(),
+                nivel: document.getElementById('nivel').value.trim(),
+                salario: document.getElementById('salario').value.trim().replace(/^R\$\s*/i, ''),
+                ar: arVal,
+                jornada: document.getElementById('jornada').value.trim(),
+                previsao: document.getElementById('previsao').value.trim(),
+                situacao: document.getElementById('situacao').value,
+                materias: lerMateriasEditor(),
+                cores: lerCores(),
+                fav: index === '' ? false : !!concursos[index].fav,
+                concluidos: index === '' ? [] : (concursos[index].concluidos || [])
+            };
+
+            if (index === '') {
+                concursos.push(data);
+            } else {
+                if (concursoAberto === concursos[index]) {
+                    concursoAberto = data;
+                    abertos.add(data);
+                }
+                concursos[index] = data;
+            }
+
+            saveToLocalStorage();
+            renderTable(document.getElementById('searchInput').value);
+            closeModal();
+        }
+
+        function editConcurso(index) { openModal(index); }
+        function deleteConcurso(index) {
+            if (confirm("Deseja realmente excluir este concurso?")) {
+                if (concursoAberto === concursos[index]) {
+                    concursoAberto = null;
+                    document.body.classList.remove('vista-concurso');
+                }
+                concursos.splice(index, 1);
+                saveToLocalStorage();
+                renderTable(document.getElementById('searchInput').value);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => renderTable(e.target.value));
+        window.matchMedia('(min-width: 768px)').addEventListener('change', () => renderTable(document.getElementById('searchInput').value));
+
+        document.getElementById('filtroMateria').addEventListener('change', () => {
+            mostrarTodosConteudos = false;
+            atualizarVisualizacaoGrafico();
+        });
+        document.getElementById('buscaConteudos').addEventListener('input', atualizarVisualizacaoGrafico);
+        document.getElementById('verTodosConteudos').addEventListener('click', () => {
+            mostrarTodosConteudos = !mostrarTodosConteudos;
+            atualizarVisualizacaoGrafico();
+        });
+
+        definirCores([]);
+
+        if (window.matchMedia('(pointer: coarse)').matches) {
+            document.getElementById('dicaOrdenar').innerHTML = '<i class="fa-solid fa-grip-vertical"></i> Segure o ícone e arraste para reordenar';
+        }
+
+        const modaisFechar = {
+            concursoModal: closeModal,
+            materiasModal: closeMateriasModal,
+            rankingModal: closeRankingModal
+        };
+        Object.entries(modaisFechar).forEach(([id, fechar]) => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                if (e.target.id === id) fechar();
+            });
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            Object.entries(modaisFechar).forEach(([id, fechar]) => {
+                if (!document.getElementById(id).classList.contains('hidden')) fechar();
+            });
+        });
+        renderTable();
+    </script>
+</body>
+</html>
